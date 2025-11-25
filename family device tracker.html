@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Family Device Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; background: #F8F9FA; margin: 0; padding: 0; color: #343A40; }
+    h1 { text-align: center; }
+    main { max-width: 600px; margin: auto; padding: 20px; }
+    section { margin-bottom: 20px; }
+    input, select, button { padding: 8px; margin: 5px 0; }
+    input, select { width: 100%; box-sizing: border-box; }
+    button { background: #007BFF; color: white; border: none; cursor: pointer; }
+    button.delete { background: #dc3545; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #e9ecef; }
+    .chart-bar { background: #007BFF; height: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Family Device Tracker</h1>
+
+    <section>
+      <label>Device Owner:</label>
+      <input type="text" id="owner">
+      <label>Date:</label>
+      <input type="date" id="date">
+      <label>Category:</label>
+      <select id="category">
+        <option>Phone</option>
+        <option>Laptop</option>
+        <option>Tablet</option>
+        <option>Other</option>
+      </select>
+      <label>Time Used (hours):</label>
+      <input type="number" id="time" min="0">
+      <button id="save">Save</button>
+    </section>
+
+    <section>
+      <table id="deviceTable">
+        <thead>
+          <tr>
+            <th>Owner</th>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Time Used</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section>
+      <button id="download">Download CSV</button>
+      <input type="file" id="uploadFile" accept=".csv">
+      <button id="upload">Upload CSV</button>
+    </section>
+
+    <section>
+      <h2>Usage Chart</h2>
+      <div id="chart"></div>
+    </section>
+  </main>
+
+  <script>
+    const ownerInput = document.getElementById('owner');
+    const dateInput = document.getElementById('date');
+    const categoryInput = document.getElementById('category');
+    const timeInput = document.getElementById('time');
+    const saveBtn = document.getElementById('save');
+    const tableBody = document.querySelector('#deviceTable tbody');
+    const downloadBtn = document.getElementById('download');
+    const uploadFile = document.getElementById('uploadFile');
+    const uploadBtn = document.getElementById('upload');
+    const chartDiv = document.getElementById('chart');
+
+    let devices = JSON.parse(localStorage.getItem('devices') || '[]');
+
+    dateInput.value = new Date().toISOString().split('T')[0];
+
+    function renderTable() {
+      tableBody.innerHTML = '';
+      devices.sort((a,b) => b.time - a.time).forEach((device, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${device.owner}</td>
+          <td>${device.date}</td>
+          <td>${device.category}</td>
+          <td>${device.time}</td>
+          <td><button class="delete" onclick="deleteDevice(${index})">Delete</button></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+      renderChart();
+    }
+
+    function renderChart() {
+      chartDiv.innerHTML = '';
+      const usageByOwner = {};
+      devices.forEach(d => {
+        usageByOwner[d.owner] = (usageByOwner[d.owner] || 0) + Number(d.time);
+      });
+      for (const owner in usageByOwner) {
+        const bar = document.createElement('div');
+        bar.style.display = 'flex';
+        bar.style.alignItems = 'center';
+        bar.style.marginBottom = '5px';
+        const label = document.createElement('div');
+        label.textContent = owner;
+        label.style.width = '100px';
+        const barInner = document.createElement('div');
+        barInner.className = 'chart-bar';
+        barInner.style.width = usageByOwner[owner] * 20 + 'px';
+        const value = document.createElement('div');
+        value.textContent = usageByOwner[owner];
+        value.style.marginLeft = '10px';
+        bar.appendChild(label);
+        bar.appendChild(barInner);
+        bar.appendChild(value);
+        chartDiv.appendChild(bar);
+      }
+    }
+
+    saveBtn.onclick = () => {
+      const device = {
+        owner: ownerInput.value,
+        date: dateInput.value,
+        category: categoryInput.value,
+        time: Number(timeInput.value)
+      };
+      devices.push(device);
+      localStorage.setItem('devices', JSON.stringify(devices));
+      renderTable();
+    };
+
+    window.deleteDevice = (index) => {
+      devices.splice(index, 1);
+      localStorage.setItem('devices', JSON.stringify(devices));
+      renderTable();
+    };
+
+    downloadBtn.onclick = () => {
+      let csv = 'Device Owner,Date,Category,Time used\\n';
+      devices.forEach(d => {
+        csv += `${d.owner},${d.date},${d.category},${d.time}\\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'devices.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    uploadBtn.onclick = () => {
+      const file = uploadFile.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const lines = e.target.result.split('\\n').slice(1);
+        lines.forEach(line => {
+          const [owner, date, category, time] = line.split(',');
+          if (owner && date && category && time) {
+            devices.push({ owner, date, category, time: Number(time) });
+          }
+        });
+        localStorage.setItem('devices', JSON.stringify(devices));
+        renderTable();
+      };
+      reader.readAsText(file);
+    };
+
+    renderTable();
+  </script>
+</body>
+</html>
